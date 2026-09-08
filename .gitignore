@@ -27,3 +27,6 @@ Thumbs.db
 
 # Bootstrap runs with local state, once.
 infra/bootstrap/.terraform/
+
+# Local working notes, never committed.
+docs/

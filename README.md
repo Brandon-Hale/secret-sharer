@@ -8,7 +8,6 @@ it cannot read. Reading a secret destroys it: the retrieve path is a single
 conditional `DeleteItem` that returns the item it deleted, so two people opening
 the same link concurrently produce exactly one success.
 
-
 ## Layout
 
 | Path                   | What it is                                                              |
