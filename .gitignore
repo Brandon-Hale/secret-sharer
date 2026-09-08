@@ -24,3 +24,6 @@ terraform.tfvars
 coverage/
 .DS_Store
 Thumbs.db
+
+# Bootstrap runs with local state, once.
+infra/bootstrap/.terraform/
