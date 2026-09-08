@@ -50,7 +50,8 @@ Terraform. Everything else is.
 
 ### First time, by hand
 
-Three things are deliberately outside the Terraform config:
+Only one thing is outside the Terraform config, and `infra/bootstrap` covers
+both account-level pieces:
 
 1. **The state bucket**, via `infra/bootstrap`. It is a separate config with
    local state because the backend cannot store the state of the thing that
@@ -66,14 +67,55 @@ Three things are deliberately outside the Terraform config:
    name embeds the account id so it is globally unique without an identifier
    being committed here. Run once, then leave it alone.
 
-2. **The GitHub OIDC provider**, if the account does not already have one. It
-   is shared by every repository in the account, so this stack does not own it.
-3. **The deploy role's permissions policy.** Terraform creates the role and its
-   trust policy; the permissions are attached by hand. A policy wide enough to
-   manage IAM, Lambda, API Gateway and DynamoDB is effectively account admin,
-   and that grant is worth making deliberately rather than in a commit.
+2. **The GitHub OIDC provider**, also in `infra/bootstrap`. One provider serves
+   every repository in the account, so the main stack must not own it —
+   destroying that stack would break unrelated pipelines. The same apply
+   creates it and prints its ARN.
 
-   > Attached policy ARN: _record it here once set._
+The deploy role and its permissions **are** in the main config
+(`infra/oidc.tf`), scoped to what this stack manages rather than the
+`AdministratorAccess` these pipelines usually get. Every statement is pinned to
+the `onetime-*` prefix or a single named resource, and `dynamodb:DeleteTable`
+is absent everywhere: `prevent_destroy` stops Terraform, and withholding the
+permission stops a compromised pipeline too.
+
+> **Known limit.** `iam:CreateRole` and `iam:AttachRolePolicy` over `onetime-*`
+> is still real power — the role could mint a new `onetime-*` role, attach a
+> broad policy, and pass it to a Lambda. Closing that properly needs a
+> permissions boundary. Worth doing if this stops being a personal project.
+
+### Automated deploys
+
+`ci` runs on every push and PR. `deploy` waits for `ci` to pass on `main`
+(via `workflow_run`), assumes an AWS role through OIDC, applies, and then smoke
+tests the live API. No AWS access key exists anywhere.
+
+To set it up on a fresh clone or fork:
+
+```bash
+gh secret set AWS_DEPLOY_ROLE_ARN --body "$(terraform -chdir=infra output -raw deploy_role_arn)"
+gh secret set TF_STATE_BUCKET   --body "onetime-tfstate-<account id>"
+gh variable set ALLOWED_ORIGIN     --body "https://<your vercel or custom domain>"
+gh variable set BUDGET_ALERT_EMAIL --body "<you@example.com>"
+gh variable set OIDC_PROVIDER_ARN  --body "$(terraform -chdir=infra/bootstrap output -raw github_oidc_provider_arn)"
+```
+
+Two things that are easy to get wrong here:
+
+- **The subject claim.** GitHub mints _immutable_ subject claims that identify
+  the repo by numeric id, not by name — `repo:owner@140154673/repo@1361361822`.
+  A trust policy matching only `repo:owner/repo` never matches, and the error
+  is a bare "Not authorized to perform sts:AssumeRoleWithWebIdentity". Check
+  what your repo actually sends with
+  `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`. The ids reach
+  Terraform from the `github` context, so nothing numeric is stored.
+- **`environment:` changes the claim.** A job declaring an environment gets
+  `…:environment:<name>` instead of `…:ref:refs/heads/main`. The deploy job
+  declares `production`, so that environment must exist in the repository.
+
+`DOMAIN_NAME` is deliberately unset — GitHub rejects an empty variable value,
+and an absent variable resolves to the empty string, which is the Terraform
+default anyway.
 
 ### Then
 
