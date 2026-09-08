@@ -128,16 +128,52 @@ data "aws_iam_policy_document" "deploy" {
   count = local.oidc_enable
 
   statement {
-    sid       = "TheTable"
-    actions   = ["dynamodb:CreateTable", "dynamodb:DescribeTable", "dynamodb:UpdateTable", "dynamodb:DescribeTimeToLive", "dynamodb:UpdateTimeToLive", "dynamodb:DescribeContinuousBackups", "dynamodb:UpdateContinuousBackups", "dynamodb:ListTagsOfResource", "dynamodb:TagResource", "dynamodb:UntagResource"]
+    sid = "TheTable"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:UpdateTable",
+      "dynamodb:UpdateTimeToLive",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTableReplicaAutoScaling",
+      "dynamodb:DescribeKinesisStreamingDestination",
+      "dynamodb:DescribeContributorInsights",
+      "dynamodb:ListTagsOfResource",
+    ]
     resources = [aws_dynamodb_table.secrets.arn]
   }
 
   # No DeleteTable, anywhere. prevent_destroy stops Terraform locally; leaving
   # the permission out stops a compromised pipeline entirely.
   statement {
-    sid       = "TheFunctions"
-    actions   = ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:AddPermission", "lambda:RemovePermission", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"]
+    sid = "TheFunctions"
+    actions = [
+      "lambda:CreateFunction",
+      "lambda:DeleteFunction",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:AddPermission",
+      "lambda:RemovePermission",
+      "lambda:TagResource",
+      "lambda:UntagResource",
+      # Every one of these is read on refresh. A missing Get is an apply-time
+      # AccessDenied, not a silent degradation, so they are listed in full.
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:GetFunctionCodeSigningConfig",
+      "lambda:GetFunctionEventInvokeConfig",
+      "lambda:GetFunctionUrlConfig",
+      "lambda:GetFunctionConcurrency",
+      "lambda:GetFunctionRecursionConfig",
+      "lambda:GetRuntimeManagementConfig",
+      "lambda:GetPolicy",
+      "lambda:ListVersionsByFunction",
+      "lambda:ListTags",
+    ]
     resources = ["arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:onetime-*"]
   }
 
@@ -171,8 +207,17 @@ data "aws_iam_policy_document" "deploy" {
   }
 
   statement {
-    sid       = "TheBudget"
-    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget", "budgets:DescribeBudget", "budgets:CreateBudgetAction", "budgets:DeleteBudgetAction"]
+    sid = "TheBudget"
+    actions = [
+      "budgets:ViewBudget",
+      "budgets:ModifyBudget",
+      "budgets:DescribeBudget",
+      "budgets:CreateBudgetAction",
+      "budgets:DeleteBudgetAction",
+      "budgets:ListTagsForResource",
+      "budgets:TagResource",
+      "budgets:UntagResource",
+    ]
     resources = ["arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/onetime-*"]
   }
 
