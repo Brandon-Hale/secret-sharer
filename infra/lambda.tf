@@ -36,7 +36,7 @@ resource "aws_lambda_function" "this" {
   function_name = "onetime-${each.key}"
   role          = each.value.role_arn
   handler       = "index.handler"
-  runtime       = "nodejs22.x"
+  runtime       = "nodejs24.x"
   architectures = ["arm64"]
   memory_size   = 256
   timeout       = 5

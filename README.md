@@ -23,7 +23,7 @@ the same link concurrently produce exactly one success.
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 24 or newer
 - Terraform 1.10 or newer, for `infra`
 
 ## Commands

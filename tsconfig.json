@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2023"],
+    "lib": ["ES2024"],
     "types": ["node"],
     // Workspace packages are consumed as TypeScript source: esbuild bundles the
     // Lambdas and Next transpiles the web app, so there is no build step to
