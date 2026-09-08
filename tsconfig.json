@@ -1,6 +1,15 @@
 {
-  // Solution-style root config: it holds no sources of its own and exists so
-  // `tsc --build` can walk every workspace. Add each package here as it lands.
-  "include": [],
-  "references": []
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Workspace packages are consumed as TypeScript source: esbuild bundles the
+    // Lambdas and Next transpiles the web app, so there is no build step to
+    // sequence and no stale .d.ts to go out of date.
+    "paths": {
+      "@onetime/contracts": ["./packages/contracts/src/index.ts"],
+      "@onetime/lambda-http": ["./packages/lambda-http/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "services/*/src/**/*.ts", "*.config.ts"]
 }

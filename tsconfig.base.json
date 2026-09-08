@@ -2,7 +2,6 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
 
@@ -14,10 +13,9 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
 
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true,
+    // esbuild produces the Lambda bundles and Next produces the web build, so
+    // tsc is only ever a checker here. Nothing emits from it.
+    "noEmit": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   }
