@@ -39,12 +39,21 @@ data "aws_iam_policy_document" "github_assume" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Scoped to main on this repository. Without a sub condition, any GitHub
-    # account anywhere could assume this role.
+    # Scoped to this repository. Without a sub condition, any GitHub account
+    # anywhere could assume this role.
+    #
+    # Both forms are listed because the claim depends on the job. A job that
+    # declares an environment gets environment:<name>; one that does not gets
+    # ref:<git ref>. The deploy job declares production, so the environment
+    # form is the one actually used — the ref form is kept so a job without an
+    # environment still works, and it is pinned to main either way.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/main"]
+      values = [
+        "repo:${var.github_repository}:environment:production",
+        "repo:${var.github_repository}:ref:refs/heads/main",
+      ]
     }
   }
 }
@@ -64,4 +73,103 @@ resource "aws_iam_role" "deploy" {
 output "deploy_role_arn" {
   description = "Set as the AWS_DEPLOY_ROLE_ARN secret in GitHub Actions."
   value       = local.oidc_enable == 0 ? "" : aws_iam_role.deploy[0].arn
+}
+
+variable "state_bucket" {
+  type        = string
+  description = "State bucket the deploy role needs read/write on. Empty omits that grant."
+  default     = ""
+}
+
+# Scoped to the resources this stack actually manages, rather than the
+# AdministratorAccess that CI pipelines usually get handed. Everything is
+# pinned to the onetime-* name prefix or to a single named resource.
+data "aws_iam_policy_document" "deploy" {
+  count = local.oidc_enable
+
+  statement {
+    sid       = "TheTable"
+    actions   = ["dynamodb:CreateTable", "dynamodb:DescribeTable", "dynamodb:UpdateTable", "dynamodb:DescribeTimeToLive", "dynamodb:UpdateTimeToLive", "dynamodb:DescribeContinuousBackups", "dynamodb:UpdateContinuousBackups", "dynamodb:ListTagsOfResource", "dynamodb:TagResource", "dynamodb:UntagResource"]
+    resources = [aws_dynamodb_table.secrets.arn]
+  }
+
+  # No DeleteTable, anywhere. prevent_destroy stops Terraform locally; leaving
+  # the permission out stops a compromised pipeline entirely.
+  statement {
+    sid       = "TheFunctions"
+    actions   = ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:AddPermission", "lambda:RemovePermission", "lambda:GetPolicy", "lambda:ListVersionsByFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"]
+    resources = ["arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:onetime-*"]
+  }
+
+  statement {
+    sid       = "TheRoles"
+    actions   = ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:PassRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies", "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags", "iam:ListInstanceProfilesForRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/onetime-*"]
+  }
+
+  statement {
+    sid       = "TheLogGroups"
+    actions   = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
+    resources = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/onetime-*"]
+  }
+
+  # API Gateway ids are generated, so there is no name to scope to. The grant
+  # is confined to the service and this region.
+  statement {
+    sid       = "TheApi"
+    actions   = ["apigateway:GET", "apigateway:POST", "apigateway:PUT", "apigateway:PATCH", "apigateway:DELETE"]
+    resources = ["arn:aws:apigateway:${var.region}::/*"]
+  }
+
+  statement {
+    sid       = "TheBudget"
+    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget", "budgets:DescribeBudget", "budgets:CreateBudgetAction", "budgets:DeleteBudgetAction"]
+    resources = ["arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/onetime-*"]
+  }
+
+  # Only needed once domain_name is set. Certificate ARNs are generated.
+  statement {
+    sid       = "TheCertificate"
+    actions   = ["acm:RequestCertificate", "acm:DescribeCertificate", "acm:DeleteCertificate", "acm:ListTagsForCertificate", "acm:AddTagsToCertificate"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadItsOwnIdentity"
+    actions   = ["sts:GetCallerIdentity"]
+    resources = ["*"]
+  }
+}
+
+data "aws_iam_policy_document" "deploy_state" {
+  count = var.state_bucket == "" ? 0 : 1
+
+  statement {
+    sid       = "StateBucket"
+    actions   = ["s3:ListBucket", "s3:GetBucketVersioning"]
+    resources = ["arn:aws:s3:::${var.state_bucket}"]
+  }
+
+  # s3:DeleteObject is what releases the lock file after an apply.
+  statement {
+    sid       = "StateObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${var.state_bucket}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "deploy" {
+  count = local.oidc_enable
+
+  name   = "onetime-deploy-stack"
+  role   = aws_iam_role.deploy[0].id
+  policy = data.aws_iam_policy_document.deploy[0].json
+}
+
+resource "aws_iam_role_policy" "deploy_state" {
+  count = local.oidc_enable == 1 && var.state_bucket != "" ? 1 : 0
+
+  name   = "onetime-deploy-state"
+  role   = aws_iam_role.deploy[0].id
+  policy = data.aws_iam_policy_document.deploy_state[0].json
 }

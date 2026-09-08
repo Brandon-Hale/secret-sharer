@@ -87,3 +87,28 @@ output "bucket" {
   description = "Pass to the main config as -backend-config=\"bucket=<this>\"."
   value       = aws_s3_bucket.state.bucket
 }
+
+# GitHub's OIDC identity provider, so Actions can assume a role without any
+# stored access key. One provider serves every repository in the account, which
+# is why it lives here rather than in the main config — that stack must not own
+# something shared, or destroying it would break unrelated pipelines.
+resource "aws_iam_openid_connect_provider" "github" {
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+
+  # AWS validates GitHub's certificate against a trusted root CA and no longer
+  # uses these, but the API still requires the field.
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1",
+    "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+output "github_oidc_provider_arn" {
+  description = "Pass to the main config as -var=\"github_oidc_provider_arn=<this>\"."
+  value       = aws_iam_openid_connect_provider.github.arn
+}
