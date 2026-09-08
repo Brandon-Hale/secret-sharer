@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+
+    services:
+      # The concurrency suite runs against dynalite locally and against the
+      # real DynamoDB Local here — same tests, two implementations.
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports: ["8000:8000"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run format:check
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Integration tests against DynamoDB Local
+        run: npm run test:integration
+        env:
+          DDB_ENDPOINT: http://127.0.0.1:8000
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_REGION: ap-southeast-2
+
+      - name: Build Lambda bundles
+        run: |
+          npm run build -w @onetime/service-create
+          npm run build -w @onetime/service-retrieve
+
+      - name: Build the web app
+        run: npm run build -w @onetime/web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.com
+
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - run: terraform fmt -check -recursive
+        working-directory: infra
+
+      # No credentials and no state: this checks syntax and references only.
+      - run: terraform init -backend=false
+        working-directory: infra
+
+      - run: terraform validate
+        working-directory: infra
