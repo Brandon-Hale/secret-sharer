@@ -149,8 +149,17 @@ data "aws_iam_policy_document" "deploy" {
 
   statement {
     sid       = "TheLogGroups"
-    actions   = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
+    actions   = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"]
     resources = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/onetime-*"]
+  }
+
+  # DescribeLogGroups is a list operation: it takes a name prefix as a
+  # parameter, not a resource, so AWS rejects any resource-level scoping on it.
+  # Read-only, and it reveals nothing but log group names.
+  statement {
+    sid       = "FindLogGroups"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
   }
 
   # API Gateway ids are generated, so there is no name to scope to. The grant
