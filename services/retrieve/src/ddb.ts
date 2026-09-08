@@ -11,11 +11,15 @@ export interface DdbOptions {
 /**
  * The once-only guarantee, in one call.
  *
- * A conditional DeleteItem with ReturnValues ALL_OLD both destroys the row and
- * hands back what it destroyed, atomically. Concurrent callers race inside
- * DynamoDB and exactly one wins; the losers get ConditionalCheckFailed, which
- * is a 404. Reading first and deleting afterwards would open a window where
- * two people both receive the secret.
+ * DeleteItem with ReturnValues ALL_OLD both destroys the row and hands back
+ * what it destroyed in one atomic operation, so concurrent callers race inside
+ * DynamoDB and only one of them is handed the item. Reading first and deleting
+ * afterwards would open a window where two people both receive the secret;
+ * services/integration proves the difference.
+ *
+ * The ConditionExpression is not what makes this safe — ALL_OLD already is.
+ * It turns "the item was not there" into an explicit exception rather than an
+ * empty response, which keeps the null path deliberate instead of incidental.
  */
 export function createClaimer({ tableName, endpoint }: DdbOptions) {
   const client = DynamoDBDocumentClient.from(
