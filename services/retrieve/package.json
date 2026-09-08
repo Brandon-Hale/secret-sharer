@@ -1,0 +1,23 @@
+{
+  "name": "@onetime/service-retrieve",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./handler": "./src/handler.ts",
+    "./ddb": "./src/ddb.ts"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@onetime/contracts": "*",
+    "@onetime/lambda-http": "*"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1127.0",
+    "@aws-sdk/lib-dynamodb": "^3.1127.0",
+    "esbuild": "^0.28.2"
+  }
+}
