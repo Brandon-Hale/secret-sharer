@@ -50,6 +50,29 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: https://api.example.com
 
+  # The job above installs every workspace at the root, where npm hoists shared
+  # devDependencies into one node_modules and the web build finds them whether
+  # or not it declares them. Vercel scopes its install to the web workspace, so
+  # a dependency web uses but does not declare passes here and fails there.
+  # This job reproduces that narrower install.
+  vercel-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install only the web workspace, as Vercel does
+        run: npm ci --workspace=@onetime/web
+
+      - run: npm run build -w @onetime/web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.com
+
   terraform:
     runs-on: ubuntu-latest
 
