@@ -33,11 +33,11 @@ jobs:
     steps:
       # workflow_run defaults to the tip of the default branch, which may have
       # moved on. Deploy the commit ci actually tested, not a later one.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -53,12 +53,12 @@ jobs:
 
       # OIDC: GitHub mints a short-lived token and AWS trades it for
       # credentials. No access keys are stored anywhere.
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ap-southeast-2
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: Terraform init
         working-directory: infra
@@ -76,6 +76,8 @@ jobs:
             -var="domain_name=${{ vars.DOMAIN_NAME }}" \
             -var="budget_alert_email=${{ vars.BUDGET_ALERT_EMAIL }}" \
             -var="github_repository=${{ github.repository }}" \
+            -var="github_owner_id=${{ github.repository_owner_id }}" \
+            -var="github_repo_id=${{ github.repository_id }}" \
             -var="github_oidc_provider_arn=${{ vars.OIDC_PROVIDER_ARN }}" \
             -var="state_bucket=${{ secrets.TF_STATE_BUCKET }}"
 
