@@ -16,6 +16,7 @@
   "scripts": {
     "typecheck": "tsc --build",
     "test": "vitest run",
+    "test:integration": "npm test -w @onetime/service-integration",
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
