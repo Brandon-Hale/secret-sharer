@@ -1,7 +1,12 @@
 name: deploy
 
+# Gated on ci rather than triggered by the push directly. As separate workflows
+# on the same push they ran in parallel, so a commit that failed every test
+# still deployed while ci went red beside it.
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -19,8 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
+    # workflow_run fires on failure too, so the conclusion has to be checked.
+    # A manual dispatch is trusted to mean it.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     steps:
+      # workflow_run defaults to the tip of the default branch, which may have
+      # moved on. Deploy the commit ci actually tested, not a later one.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -59,4 +74,30 @@ jobs:
           terraform apply -auto-approve \
             -var="allowed_origin=${{ vars.ALLOWED_ORIGIN }}" \
             -var="domain_name=${{ vars.DOMAIN_NAME }}" \
-            -var="budget_alert_email=${{ vars.BUDGET_ALERT_EMAIL }}"
+            -var="budget_alert_email=${{ vars.BUDGET_ALERT_EMAIL }}" \
+            -var="github_repository=${{ github.repository }}" \
+            -var="github_oidc_provider_arn=${{ vars.OIDC_PROVIDER_ARN }}" \
+            -var="state_bucket=${{ secrets.TF_STATE_BUCKET }}"
+
+      # The deploy is only real if the API still behaves. This is the same
+      # acceptance check the README documents, run automatically.
+      - name: Smoke test the live API
+        working-directory: infra
+        run: |
+          API=$(terraform output -raw api_invoke_url)
+          ID=$(curl -sf -X POST "$API/secrets" \
+                 -H 'content-type: application/json' \
+                 -d '{"ciphertext":"c21va2UtdGVzdA","expiresIn":3600}' \
+               | sed -E 's/.*"id":"([^"]+)".*/\1/')
+          test -n "$ID" || { echo "create returned no id"; exit 1; }
+
+          FIRST=$(curl -s -o /dev/null -w '%{http_code}' "$API/secrets/$ID")
+          SECOND=$(curl -s -o /dev/null -w '%{http_code}' "$API/secrets/$ID")
+          BAD=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/secrets" \
+                  -H 'content-type: application/json' \
+                  -d '{"ciphertext":"c21va2U","expiresIn":60}')
+
+          echo "first=$FIRST second=$SECOND disallowed-expiry=$BAD"
+          test "$FIRST" = "200" || { echo "expected 200 on first claim"; exit 1; }
+          test "$SECOND" = "404" || { echo "expected 404 on second claim"; exit 1; }
+          test "$BAD" = "400" || { echo "expected 400 for a disallowed expiry"; exit 1; }
