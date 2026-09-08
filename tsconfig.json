@@ -1,0 +1,6 @@
+{
+  // Solution-style root config: it holds no sources of its own and exists so
+  // `tsc --build` can walk every workspace. Add each package here as it lands.
+  "include": [],
+  "references": []
+}

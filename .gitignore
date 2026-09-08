@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Terraform (.terraform.lock.hcl IS committed — it pins provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/.build/
+terraform.tfvars
+
+# Lambda bundles
+*.zip
+
+# Environment — never commit a real one
+.env
+.env.*
+!.env.example
+
+.vercel/
+coverage/
+.DS_Store
+Thumbs.db
