@@ -1,0 +1,8 @@
+{
+  // The web tests, checked with the same settings as the app they cover.
+  // Kept separate so tsconfig.json — the one `next build` reads — stays free
+  // of any reference to test-only packages.
+  "extends": "./tsconfig.json",
+  "include": ["lib/**/*.ts", "app/**/*.ts", "app/**/*.tsx", "*.ts"],
+  "exclude": ["node_modules", ".next"]
+}
