@@ -7,7 +7,7 @@ await build({
   minify: true,
   sourcemap: true,
   platform: "node",
-  target: "node22",
+  target: "node24",
   format: "esm",
   // The AWS SDK v3 ships in the Node 22 runtime. Bundling it would add
   // megabytes and freeze a copy that never gets the runtime's patches.

@@ -3,7 +3,7 @@
   "compilerOptions": {
     // Browser code: the crypto layer uses WebCrypto, btoa and TextEncoder, all
     // of which come from the DOM lib rather than from Node.
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "jsx": "preserve",
     "module": "ESNext",
