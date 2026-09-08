@@ -15,8 +15,57 @@ variable "github_oidc_provider_arn" {
   default     = ""
 }
 
+variable "github_owner_id" {
+  type        = string
+  description = <<-EOT
+    Numeric GitHub account id of the repository owner. GitHub now mints
+    immutable subject claims that identify the repo by id rather than by name,
+    so the trust policy has to know these. Find them with:
+
+      gh api repos/<owner>/<repo> --jq '{owner_id: .owner.id, repo_id: .id}'
+
+    Empty falls back to matching the name-based claim only.
+  EOT
+  default     = ""
+}
+
+variable "github_repo_id" {
+  type        = string
+  description = "Numeric GitHub id of the repository. See github_owner_id."
+  default     = ""
+}
+
 locals {
   oidc_enable = var.github_repository == "" ? 0 : 1
+
+  # The subject claim comes in two shapes and which one GitHub sends is not
+  # under our control, so both exact forms are allowed.
+  #
+  # The name form, repo:<owner>/<repo>, is the one every tutorial shows. The
+  # immutable form, repo:<owner>@<owner id>/<repo>@<repo id>, is what GitHub
+  # actually sends now; it survives a rename, which is the point of it, and it
+  # is the stricter of the two because ids cannot be squatted.
+  subject_prefixes = compact([
+    "repo:${var.github_repository}",
+    var.github_owner_id != "" && var.github_repo_id != "" ? format(
+      "repo:%s@%s/%s@%s",
+      split("/", var.github_repository)[0],
+      var.github_owner_id,
+      split("/", var.github_repository)[1],
+      var.github_repo_id,
+    ) : "",
+  ])
+
+  # A job that declares an environment gets environment:<name>; one that does
+  # not gets ref:<git ref>. The deploy job declares production, so that is the
+  # form in use — the ref form is kept so a job without an environment works,
+  # and it stays pinned to main either way.
+  allowed_subjects = flatten([
+    for prefix in local.subject_prefixes : [
+      "${prefix}:environment:production",
+      "${prefix}:ref:refs/heads/main",
+    ]
+  ])
   oidc_provider_arn = var.github_oidc_provider_arn != "" ? var.github_oidc_provider_arn : (
     "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
   )
@@ -39,21 +88,12 @@ data "aws_iam_policy_document" "github_assume" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Scoped to this repository. Without a sub condition, any GitHub account
-    # anywhere could assume this role.
-    #
-    # Both forms are listed because the claim depends on the job. A job that
-    # declares an environment gets environment:<name>; one that does not gets
-    # ref:<git ref>. The deploy job declares production, so the environment
-    # form is the one actually used — the ref form is kept so a job without an
-    # environment still works, and it is pinned to main either way.
+    # Without a sub condition, any GitHub account anywhere could assume this
+    # role. See local.allowed_subjects for what these values mean.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "repo:${var.github_repository}:environment:production",
-        "repo:${var.github_repository}:ref:refs/heads/main",
-      ]
+      values   = local.allowed_subjects
     }
   }
 }
