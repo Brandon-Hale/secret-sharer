@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Browser code: the crypto layer uses WebCrypto, btoa and TextEncoder, all
+    // of which come from the DOM lib rather than from Node.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // Node types are here for the test files, which compare against Buffer.
+    "types": ["node"],
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@onetime/contracts": ["../packages/contracts/src/index.ts"]
+    }
+  },
+  "include": ["lib/**/*.ts", "app/**/*.ts", "app/**/*.tsx", "*.ts", "*.mjs"],
+  "exclude": ["node_modules", ".next"]
+}
