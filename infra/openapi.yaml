@@ -1,0 +1,140 @@
+# Rendered through templatefile(): ${create_invoke_arn}, ${retrieve_invoke_arn}
+# and ${allowed_origin} are Terraform interpolations, not OpenAPI syntax.
+#
+# Defining the API this way replaces roughly twenty aws_api_gateway_resource,
+# _method, _integration and _method_response declarations for two endpoints
+# with CORS.
+openapi: "3.0.1"
+
+info:
+  title: onetime
+  version: "1.0"
+
+paths:
+  /secrets:
+    post:
+      summary: Store a ciphertext and return its id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSecretRequest"
+      responses:
+        "201":
+          description: created
+        "400":
+          description: malformed request
+      x-amazon-apigateway-request-validator: all
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: ${create_invoke_arn}
+        payloadFormatVersion: "1.0"
+
+    options:
+      summary: CORS preflight
+      responses:
+        "204":
+          description: preflight
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: '{"statusCode": 204}'
+        responses:
+          default:
+            statusCode: "204"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'${allowed_origin}'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type'"
+
+  /secrets/{id}:
+    get:
+      summary: Claim a secret, destroying it
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+        "404":
+          description: claimed, expired, or never existed — indistinguishably
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: ${retrieve_invoke_arn}
+        payloadFormatVersion: "1.0"
+
+    options:
+      summary: CORS preflight
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: preflight
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: '{"statusCode": 204}'
+        responses:
+          default:
+            statusCode: "204"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'${allowed_origin}'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type'"
+
+components:
+  schemas:
+    # The outer guard. A body that fails this is rejected by API Gateway and
+    # never invokes Lambda, so malformed and oversized payloads cost nothing.
+    CreateSecretRequest:
+      type: object
+      required:
+        - ciphertext
+        - expiresIn
+      additionalProperties: false
+      properties:
+        ciphertext:
+          type: string
+          minLength: 1
+          # 65536 bytes as unpadded base64url. Kept in step with
+          # MAX_CIPHERTEXT_LENGTH in packages/contracts.
+          maxLength: 87382
+          pattern: "^[A-Za-z0-9_-]+$"
+        expiresIn:
+          type: integer
+          enum: [3600, 86400, 604800]
+
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
