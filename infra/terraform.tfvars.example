@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored) or pass with -var on the command line.
+
+# The single origin the browser app is served from. No wildcard, no path.
+allowed_origin = "https://onetime.example.com"
+
+# Apex domain. The API is published at api.<domain_name>.
+# Leave empty to skip the custom domain and use the raw execute-api URL.
+domain_name = "example.com"
+
+# Leave empty to skip the budget alarm.
+budget_alert_email = "you@example.com"
