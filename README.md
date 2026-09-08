@@ -52,10 +52,20 @@ Terraform. Everything else is.
 
 Three things are deliberately outside the Terraform config:
 
-1. **The state bucket.** Create a versioned, encrypted S3 bucket in
-   `ap-southeast-2`. Creating it from the state it stores would be circular.
-   Locking uses `use_lockfile`, so no DynamoDB lock table is needed — most
-   tutorials are out of date on this.
+1. **The state bucket**, via `infra/bootstrap`. It is a separate config with
+   local state because the backend cannot store the state of the thing that
+   creates it. Locking uses `use_lockfile`, so no DynamoDB lock table is
+   needed — most tutorials are out of date on this.
+
+   ```bash
+   terraform -chdir=infra/bootstrap init
+   terraform -chdir=infra/bootstrap apply     # prints the bucket name
+   ```
+
+   The bucket is versioned, encrypted and fully public-access-blocked, and its
+   name embeds the account id so it is globally unique without an identifier
+   being committed here. Run once, then leave it alone.
+
 2. **The GitHub OIDC provider**, if the account does not already have one. It
    is shared by every repository in the account, so this stack does not own it.
 3. **The deploy role's permissions policy.** Terraform creates the role and its
